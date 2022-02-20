@@ -1,5 +1,6 @@
 from html import entities
 from pydoc_data.topics import topics
+from turtle import color
 import spacy
 from spacy.lang.fr.examples import sentences
 import json
@@ -11,15 +12,54 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 import configparser
+import tqdm
+import logging
 
 config = configparser.ConfigParser()
 config.read("./config/config.ini")
+
+logging.basicConfig(
+    filename=f"{config['DIR_PATH']['LOG_DIR']}/tokenization.log",
+    format="%(levelname)s:%(funcName)s:%(asctime)s:%(message)s",
+    level=logging.INFO,
+)
+
 
 FILTERS = dict(config["FILTERS"])
 
 SRC_DIR = config["DIR_PATH"]["SRC_DIR"]
 TGT_DIR = config["DIR_PATH"]["TGT_DIR"]
-nlp = spacy.load(config["SPACY_PARAM"]["LANG_MODEL"])
+nlp = None
+
+
+def prepare_words_to_store(unique_words: dict) -> pd.DataFrame:
+    """
+    Perform some organization for the list of words, since this is a final product in itself.
+    """
+    df = pd.DataFrame()
+    df["words"] = [word for word in unique_words]
+    df["occurrences"] = [unique_words[word] for word in unique_words]
+    df["frequency"] = df["occurrences"] * 100 / df["occurrences"].sum()
+    df.sort_values(by="occurrences", ascending=False, inplace=True)
+
+    return df
+
+
+def clean_word(word: str) -> str:
+    """
+    This part is based on visual investigation of the output words.
+    """
+    if word in ["-", "’", "–", "−"]:
+        return ""
+
+    word = word.lower()
+    word = word.replace("-", "").replace("–", "").replace("”", "")
+
+    if len(word) > 0:
+        if (word[-1] == "’") or (word[-1] == "'"):
+            word = word.replace("’", "e")
+            word = word.replace("'", "e")
+    return word
 
 
 def get_words_from_article(article_text):
@@ -43,31 +83,35 @@ def get_words_from_article(article_text):
     for token in doc:
         if token.pos_ in ["SPACE", "PUNCT", "NUM", "SYM", "ADP", "DET"]:
             continue
-        # print(token.text, token.pos_, token.dep_, token.lemma_)
+
+        # Perform extract cleaning on the word
+        final_token = clean_word(token.lemma_)
+        if len(final_token) == 0:
+            continue
 
         if token.pos_ in ["VERB"]:
             try:
-                verbs[token.lemma_] += 1
+                verbs[final_token] += 1
             except:
-                verbs[token.lemma_] = 1
+                verbs[final_token] = 1
 
         if token.pos_ in ["NOUN"]:
             try:
-                nouns[token.lemma_] += 1
+                nouns[final_token] += 1
             except:
-                nouns[token.lemma_] = 1
+                nouns[final_token] = 1
 
         if token.pos_ in ["ADV"]:
             try:
-                adverbs[token.lemma_] += 1
+                adverbs[final_token] += 1
             except:
-                adverbs[token.lemma_] = 1
+                adverbs[final_token] = 1
 
         try:
-            words[token.lemma_] += 1
+            words[final_token] += 1
         except:
-            words[token.lemma_] = 1
-        # all_words.append(token.lemma_)
+            words[final_token] = 1
+        # all_words.append(final_token)
     # return words, " ".join(all_words)
     return words, verbs, nouns, adverbs, entities
 
@@ -147,7 +191,9 @@ def get_articles(directory):
 
     total_number_of_words = 0
 
-    for file_index, file_name in enumerate(file_names):
+    for file_index, file_name in enumerate(
+        tqdm.tqdm(file_names, desc="Processing files", colour="green")
+    ):
         # if file_index >= 1000:
         #     break
         if (file_name != "all_links_recorded.json") and (
@@ -156,7 +202,9 @@ def get_articles(directory):
             article_insertion_speed = 0
             article_data = json.load(open(f"{directory}/{file_name}", "r"))
             if apply_filter_value(article_data, filters=FILTERS):
-                print(file_index, file_name)
+                if file_index % 500 == 0:
+                    logging.info("%s files are done", file_index)
+                # logging.info("Processing file: %s, %s", file_index, file_name)
                 nb_of_articles += 1
                 all_words, verbs, nouns, adverbs, entities = load_one_article(
                     article_data
@@ -211,20 +259,16 @@ def get_articles(directory):
         # return all_words
 
     # print(f"Insertion speeds: {total_insertion_speed}")
-    print(f"Nb of total words seen so far: {total_number_of_words}")
-    print(f"Nb of unique words seen so far: {len(all_new_words.keys())}")
-    print(f"Nb of unique verbs seen so far: {len(all_verbs.keys())}")
-    print(f"Nb of unique nouns seen so far: {len(all_nouns.keys())}")
-    print(f"Nb of unique adverbs seen so far: {len(all_adverbs.keys())}")
+    logging.info("Nb of total words seen so far: %s", total_number_of_words)
+    logging.info("Nb of unique words seen so far: %s", len(all_new_words.keys()))
+    logging.info("Nb of unique verbs seen so far: %s", len(all_verbs.keys()))
+    logging.info("Nb of unique nouns seen so far: %s", len(all_nouns.keys()))
+    logging.info("Nb of unique adverbs seen so far: %s", len(all_adverbs.keys()))
     # print(f"Nb of unique entities seen so far: {len(all_entities.keys())}")
 
     log_file = {
         "total_insertion_speed": total_insertion_speed,
         "total_number_of_words": total_number_of_words,
-        "unique_words": all_new_words,
-        "unique_verbs": all_verbs,
-        "unique_nouns": all_nouns,
-        "unique_adverbs": all_adverbs,
         "all_years": all_years,
         "all_months": all_months,
         "all_days": all_days,
@@ -233,6 +277,15 @@ def get_articles(directory):
 
     json.dump(log_file, open(f"{TGT_DIR}/{FILTER_DIR}/logs.json", "w"))
 
+    clean_all_new_words_df = prepare_words_to_store(all_new_words)
+    clean_all_new_words_df.to_csv(
+        f"{TGT_DIR}/{FILTER_DIR}/unique_words.csv", index=False
+    )
+    clean_and_store_word_dictionaries(all_new_words, "allWords")
+    clean_and_store_word_dictionaries(all_nouns, "allNouns")
+    clean_and_store_word_dictionaries(all_verbs, "allVerbs")
+    clean_and_store_word_dictionaries(all_adverbs, "allAdverbs")
+
     draw_insertion_speed(total_insertion_speed)
     draw_word_cloud(all_new_words, "allWords")
     draw_word_cloud(all_nouns, "allNouns")
@@ -240,6 +293,13 @@ def get_articles(directory):
     draw_word_cloud(all_adverbs, "allAdverbs")
     for entity in all_entities:
         draw_word_cloud(all_entities[entity], f"allEnts_{entity}")
+
+
+def clean_and_store_word_dictionaries(words_dict: dict, file_name: str) -> None:
+    prepare_words_to_store(words_dict).to_csv(
+        f"{TGT_DIR}/{FILTER_DIR}/{file_name}.csv", index=False
+    )
+    logging.info("Stored clean words - %s", file_name)
 
 
 def draw_insertion_speed(insertion_speeds_list: list):
@@ -265,7 +325,7 @@ def draw_insertion_speed(insertion_speeds_list: list):
     plt.ylabel("Number of new words")
     # plt.hist(insertion_speeds_np)
     plt.savefig(f"./{TGT_DIR}/{FILTER_DIR}/insertionSpeedOrdered.png")
-    print(f"Insertion Graph speed is done")
+    logging.info("Insertion Graph speed is done")
 
 
 def draw_word_cloud(words_frequencies: dict, name: str):
@@ -281,7 +341,7 @@ def draw_word_cloud(words_frequencies: dict, name: str):
     plt.axis("off")
     plt.savefig(f"{TGT_DIR}/{FILTER_DIR}/wordCloud_{name}.png")
 
-    print(f"Word cloud for {name} is DONE")
+    logging.info("Word cloud for %s is DONE", name)
 
 
 def form_results_folder_name(filters: dict):
@@ -300,13 +360,21 @@ def form_results_folder_name(filters: dict):
     try:
         os.mkdir(f"{TGT_DIR}/{FILTER_DIR}")
     except Exception as e:
-        print(f"COULDN'T MAKE DIRECTORY --- {e}")
+        logging.warning("COULDN'T MAKE DIRECTORY --- %s", e)
+
+    logging.info("Filter configuration: %s", FILTER_DIR)
+
+    return FILTER_DIR
 
 
 def main():
+    logging.info("/*" * 20)
+    logging.info("/*" * 20)
+    logging.info("Fresh new run")
     form_results_folder_name(filters=FILTERS)
     get_articles(SRC_DIR)
 
 
 if __name__ == "__main__":
+    nlp = spacy.load(config["SPACY_PARAM"]["LANG_MODEL"])
     main()

@@ -14,6 +14,7 @@ from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 import configparser
 import tqdm
 import logging
+import utilities
 
 config = configparser.ConfigParser()
 config.read("./config/config.ini")
@@ -116,47 +117,6 @@ def get_words_from_article(article_text):
     return words, verbs, nouns, adverbs, entities
 
 
-def parse_single_filter_list(value):
-    """
-    It takes a string, comma separated, of options, and return a list of them
-    """
-    options_list = value.split(",")
-    if options_list[-1] == "":
-        return options_list[:-1]
-    return options_list
-
-
-def apply_filter_value(article_data: dict, filters: dict):
-    years = filters.get("years", [])
-    days = filters.get("days", [])
-    months = filters.get("months", [])
-    topics = filters.get("topics", [])
-    words = filters.get("words", [])  # List of words that has to exist in the article
-
-    article_pass_validation = True
-    if len(years) > 0:
-        years = parse_single_filter_list(years)
-        if article_data["publication_date"]["year"] not in years:
-            article_pass_validation = False
-
-    if len(days) > 0:
-        days = parse_single_filter_list(days)
-        if article_data["publication_date"]["day"] not in days:
-            article_pass_validation = False
-
-    if len(months) > 0:
-        months = parse_single_filter_list(months)
-        if article_data["publication_date"]["month"] not in months:
-            article_pass_validation = False
-
-    if len(topics) > 0:
-        topics = parse_single_filter_list(topics)
-        if article_data["topic_category"] not in topics:
-            article_pass_validation = False
-
-    return article_pass_validation
-
-
 def load_one_article(article_data):
     article_main_text = (
         article_data["article_content"]["title"]
@@ -191,17 +151,10 @@ def get_articles(directory):
 
     total_number_of_words = 0
 
-    for file_index, file_name in enumerate(
-        tqdm.tqdm(file_names, desc="Processing files", colour="green")
-    ):
-        # if file_index >= 1000:
-        #     break
-        if (file_name != "all_links_recorded.json") and (
-            file_name != "all_topic_collected.json"
-        ):
+    with utilities.DataLoader(limit=-1) as data_handler:
+        for file_index, article_data in enumerate(data_handler):
             article_insertion_speed = 0
-            article_data = json.load(open(f"{directory}/{file_name}", "r"))
-            if apply_filter_value(article_data, filters=FILTERS):
+            if utilities.apply_filter_value(article_data, filters=FILTERS):
                 if file_index % 500 == 0:
                     logging.info("%s files are done", file_index)
                 # logging.info("Processing file: %s, %s", file_index, file_name)
@@ -353,7 +306,7 @@ def form_results_folder_name(filters: dict):
     global FILTER_DIR
     FILTER_DIR = ""
     for item in filters:
-        FILTER_DIR += "-".join(parse_single_filter_list(filters[item])) + "_"
+        FILTER_DIR += "-".join(utilities.parse_single_filter_list(filters[item])) + "_"
     FILTER_DIR = FILTER_DIR[:-1]  # to remove the last '-' from the code
     if FILTER_DIR == "":
         FILTER_DIR = "noFilter"

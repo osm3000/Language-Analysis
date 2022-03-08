@@ -1,4 +1,4 @@
 config/auth_lemonde.ini
 __pycache__/
-data_4/
+data_*/
 docs/

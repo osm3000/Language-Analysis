@@ -178,9 +178,6 @@ async def get_article_content(article_url):
     for item in related_articles_links:
         other_articles_links.append(item["href"])
 
-    # print(f"IMAGES ::::: {len(img_links) == len(img_captions)}")
-    # print(f"HREF ::::: {len(all_href) == len(all_href_text)}")
-
     package = {
         "article_link": article_url,
         "all_href": all_href,
@@ -195,19 +192,6 @@ async def get_article_content(article_url):
         },
     }
 
-    # for item in package:
-    #     print(item)
-    #     if item == "article_content":
-    #         for element in package[item]:
-    #             print("---->>>>>>", element)
-    #             print(package[item][element])
-    #     else:
-    #         print(package[item])
-    #     print("=/-" * 30)
-
-    # exit()
-
-    # return soup.text.lower()
     return package
 
 
@@ -254,13 +238,15 @@ async def main():
             if all_links_visited:
                 break
     else:
-        all_type_of_links = json.load(open(f"{DIRECTORY}/all_links_recorded.json", "r"))
+        with open(f"{DIRECTORY}/all_links_recorded.json", "r") as file_handle:
+            all_type_of_links = json.load(file_handle)
 
     all_type_of_links["articles_pages"] = list(all_type_of_links["articles_pages"])
     all_type_of_links["articles_links"] = list(all_type_of_links["articles_links"])
     # print(f"All collected links: {all_type_of_links['articles_links']}")
 
-    json.dump(all_type_of_links, open(f"{DIRECTORY}/all_links_recorded.json", "w"))
+    with open(f"{DIRECTORY}/all_links_recorded.json", "w") as file_handle:
+        json.dump(all_type_of_links, file_handle)
 
     await asyncio.gather(
         *[
@@ -298,21 +284,12 @@ async def get_contents_of_articles(articles_index, articles_link):
             f"Article Index: {articles_index} / {len(all_type_of_links['articles_links'])}"
         )
         article_content = await get_article_content(articles_link)
+        with open(f"{DIRECTORY}/{articles_index}.json", "w") as file_handle:
+            json.dump(
+                article_content,
+                file_handle,
+            )
 
-        json.dump(
-            article_content,
-            open(f"{DIRECTORY}/{articles_index}.json", "w"),
-        )
-
-        # json.dump(
-        #     {"link": articles_link, "text": article_content},
-        #     open(f"./data/{articles_index}.json", "w"),
-        # )
-
-        # article_content = articles_link + "\n" + article_content
-        # with open(f"./data/{articles_index}.txt", "w") as fileHandle:
-        #     # print(article_content, fileHandle)
-        #     fileHandle.write(article_content)
         print("/*" * 50)
 
 

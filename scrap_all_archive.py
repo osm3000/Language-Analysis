@@ -9,16 +9,22 @@ import asyncio
 import uuid
 import configparser
 from datetime import datetime, timedelta
+import os
+
+config = configparser.ConfigParser()
+config.read("./config/config.ini")
+
 
 SECRETS = configparser.ConfigParser()
 SECRETS.read("./config/auth_lemonde.ini")
 
 # FIRST_DATE = datetime(day=19, month=12, year=1944)
-FIRST_DATE = datetime(day=1, month=1, year=2020)
-END_DATE = datetime(day=7, month=3, year=2022)
+FIRST_DATE = datetime.strptime(config["DATES"]["START"], "%d-%m-%Y")
+END_DATE = datetime.strptime(config["DATES"]["END"], "%d-%m-%Y")
+
 GET_FRESH = True
 # GET_FRESH = False
-DIRECTORY = "./data_5"
+
 all_type_of_links = {
     # "articles_pages": {"https://www.lemonde.fr/archives-du-monde/14-01-2020/"},
     # "articles_pages": {"https://www.lemonde.fr/archives-du-monde/19-12-1944/"},
@@ -224,15 +230,19 @@ async def main():
             if all_links_visited:
                 break
     else:
-        with open(f"{DIRECTORY}/all_links_recorded.json", "r") as file_handle:
+        with open(
+            f"{config['DIR_PATH']['SRC_DIR']}/all_links_recorded.json", "r"
+        ) as file_handle:
             all_type_of_links = json.load(file_handle)
 
-    exit()
+    # exit()
     all_type_of_links["articles_pages"] = list(all_type_of_links["articles_pages"])
     all_type_of_links["articles_links"] = list(all_type_of_links["articles_links"])
     # print(f"All collected links: {all_type_of_links['articles_links']}")
 
-    with open(f"{DIRECTORY}/all_links_recorded.json", "w") as file_handle:
+    with open(
+        f"{config['DIR_PATH']['SRC_DIR']}/all_links_recorded.json", "w"
+    ) as file_handle:
         json.dump(all_type_of_links, file_handle)
 
     await asyncio.gather(
@@ -270,7 +280,9 @@ async def get_contents_of_articles(articles_index, articles_link):
             f"Article Index: {articles_index} / {len(all_type_of_links['articles_links'])}"
         )
         article_content = await get_article_content(articles_link)
-        with open(f"{DIRECTORY}/{str(uuid.uuid4())}.json", "w") as file_handle:
+        with open(
+            f"{config['DIR_PATH']['SRC_DIR']}/{str(uuid.uuid4())}.json", "w"
+        ) as file_handle:
             json.dump(
                 article_content,
                 file_handle,
@@ -280,6 +292,10 @@ async def get_contents_of_articles(articles_index, articles_link):
 
 
 if __name__ == "__main__":
+    if not os.path.isdir(config["DIR_PATH"]["SRC_DIR"]):
+        print(f"Folder doesn't exit. Create it")
+        os.mkdir(config["DIR_PATH"]["SRC_DIR"])
+
     payload = {
         "email": SECRETS["AUTH"]["email"],
         "password": SECRETS["AUTH"]["password"],
@@ -288,12 +304,10 @@ if __name__ == "__main__":
     sess = requests.Session()
     res = sess.get("https://secure.lemonde.fr/sfuser/connexion")
     signin = BeautifulSoup(res._content, "html.parser")
-    # payload['csrf_token'] = signin.find('input', id='csrf_token')['value']
-    # print(signin.text)
-    # print("/*-" * 100)
+
     res = sess.post("https://secure.lemonde.fr/sfuser/connexion", data=payload)
 
     success = BeautifulSoup(res._content, "html.parser")
-    # print(success.text)
+
     asyncio.run(main())
     sess.close()

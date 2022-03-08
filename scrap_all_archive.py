@@ -10,6 +10,7 @@ import uuid
 import configparser
 from datetime import datetime, timedelta
 import os
+import slack_bot
 
 config = configparser.ConfigParser()
 config.read("./config/config.ini")
@@ -235,6 +236,8 @@ async def main():
         ) as file_handle:
             all_type_of_links = json.load(file_handle)
 
+    with slack_bot.BasicBot() as my_bot:
+        my_bot("Scrapping LeMonde: Getting the links is done")
     # exit()
     all_type_of_links["articles_pages"] = list(all_type_of_links["articles_pages"])
     all_type_of_links["articles_links"] = list(all_type_of_links["articles_links"])
@@ -292,6 +295,10 @@ async def get_contents_of_articles(articles_index, articles_link):
 
 
 if __name__ == "__main__":
+    # This part needs to be cleaned
+    with slack_bot.BasicBot() as my_bot:
+        my_bot("Scrapping LeMonde: Started")
+
     if not os.path.isdir(config["DIR_PATH"]["SRC_DIR"]):
         print(f"Folder doesn't exit. Create it")
         os.mkdir(config["DIR_PATH"]["SRC_DIR"])
@@ -311,3 +318,6 @@ if __name__ == "__main__":
 
     asyncio.run(main())
     sess.close()
+
+    with slack_bot.BasicBot() as my_bot:
+        my_bot("Scrapping LeMonde: job complete")

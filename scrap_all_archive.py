@@ -44,8 +44,6 @@ def generate_whole_years():
     global all_type_of_links
     global FIRST_DATE
     while True:
-        if FIRST_DATE == END_DATE:
-            break
 
         first_date_str = FIRST_DATE.strftime("%d-%m-%Y")
         all_type_of_links["articles_pages"].add(
@@ -53,6 +51,8 @@ def generate_whole_years():
         )
         FIRST_DATE += timedelta(days=1)
 
+        if FIRST_DATE > END_DATE:
+            break
     return None
 
 
@@ -238,6 +238,9 @@ async def main():
 
     with slack_bot.BasicBot() as my_bot:
         my_bot("Scrapping LeMonde: Getting the links is done")
+        my_bot(
+            f'Scrapping LeMonde: Current number of articles: {len(all_type_of_links["articles_links"])}'
+        )
     # exit()
     all_type_of_links["articles_pages"] = list(all_type_of_links["articles_pages"])
     all_type_of_links["articles_links"] = list(all_type_of_links["articles_links"])
@@ -274,6 +277,9 @@ async def get_all_links_in_page(article_page):
 
 async def get_contents_of_articles(articles_index, articles_link):
     # Get all articles content
+    if ((articles_index + 1) % 500) == 0:
+        with slack_bot.BasicBot() as my_bot:
+            my_bot(f"Scrapping LeMonde: {articles_index} articles are done")
 
     if articles_link not in seen_articles_links:
         seen_articles_links.add(articles_link)

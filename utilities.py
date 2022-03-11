@@ -1,22 +1,24 @@
 """
 Facilities required for a better re-factorization of the code
 """
-import configparser
+import configurations
 import logging
 import os
 import tqdm
 import json
 
-config = configparser.ConfigParser()
-config.read("./config/config.ini")
-
-SRC_DIR = config["DIR_PATH"]["SRC_DIR"]
-TGT_DIR = config["DIR_PATH"]["TGT_DIR"]
+CONFIG = configurations.get_config_file()
 
 
 class DataLoader:
-    def __init__(self, limit: int = -1) -> None:
-        self.all_file_names = os.listdir(SRC_DIR)
+    def __init__(self, limit: int = -1, use_tokenized=False) -> None:
+        self.use_tokenized = use_tokenized
+        if use_tokenized:
+            self.src_data_path = CONFIG["DIR_PATH"]["TOKENIZED_DIR"]
+        else:
+            self.src_data_path = CONFIG["DIR_PATH"]["SRC_DIR"]
+
+        self.all_file_names = os.listdir(self.src_data_path)
         self.limit = limit
         self._get_clean_file_names()
 
@@ -36,7 +38,7 @@ class DataLoader:
         for file_index, file_name in enumerate(
             tqdm.tqdm(self.clean_file_names, desc="Processing files", colour="green")
         ):
-            article_data = json.load(open(f"{SRC_DIR}/{file_name}", "r"))
+            article_data = json.load(open(f"{self.src_data_path}/{file_name}", "r"))
             yield article_data
 
         return article_data
@@ -51,7 +53,7 @@ class DataLoader:
         file_counter = 0
         for file_index, file_name in enumerate(self.all_file_names):
             files_to_exclude = parse_single_filter_list(
-                config["FILES_TO_EXCLUDE"]["FILES"]
+                CONFIG["FILES_TO_EXCLUDE"]["FILES"]
             )
 
             if file_name not in files_to_exclude:
@@ -102,3 +104,16 @@ def apply_filter_value(article_data: dict, filters: dict):
             article_pass_validation = False
 
     return article_pass_validation
+
+
+def get_existing_links():
+    """
+    Return the list of all the links in the current data directory
+    Necessary to recover from a failed connection
+    """
+    list_of_links = []
+    with DataLoader() as data_handle:
+        for file_index, article_data in enumerate(data_handle):
+            list_of_links.append(article_data["article_link"])
+
+    return list_of_links

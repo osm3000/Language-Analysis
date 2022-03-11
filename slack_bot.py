@@ -1,10 +1,9 @@
 from slack import WebClient
 from slack.errors import SlackApiError
-import configparser
+import configurations
 import platform
 
-SECRETS = configparser.ConfigParser()
-SECRETS.read("./config/auth_lemonde.ini")
+SECRETS = configurations.get_secrets_file()
 
 
 class BasicBot:

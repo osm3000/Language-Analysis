@@ -28,6 +28,8 @@ class DataLoader:
         return self._load_files_iterator()
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
+        del self.src_data_path
+        del self.use_tokenized
         del self.all_file_names
         del self.limit
         del self.clean_file_names
@@ -38,7 +40,12 @@ class DataLoader:
         for file_index, file_name in enumerate(
             tqdm.tqdm(self.clean_file_names, desc="Processing files", colour="green")
         ):
-            article_data = json.load(open(f"{self.src_data_path}/{file_name}", "r"))
+            try:
+                article_data = json.load(open(f"{self.src_data_path}/{file_name}", "r"))
+            except:
+                print("corrupt file")
+                os.remove(f"{self.src_data_path}/{file_name}")
+                continue
             yield article_data
 
         return article_data

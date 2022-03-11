@@ -280,6 +280,10 @@ async def main():
                 f"Scrapping LeMonde: {len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} articles are done"
             )
 
+        print(
+            f"{len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} are done!"
+        )
+
 
 async def get_all_links_in_page(article_page):
     global sess

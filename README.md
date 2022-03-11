@@ -9,6 +9,7 @@ This is a simple analysis for the articles provided from LeMonde.
   * For example, I want to choose a specific data path in the VM
   [x] Create a `config.py` file, to handle this logic. Replace the direct import of config files with `config.py`
   [ ] Write a script to generate the config files - in a valid format, with valid initial values
+[x] Be able to recover from an abrupture in the connection/scrapping process
 
 ## Analysis Todo
 * N-gram analysis: what is the most 

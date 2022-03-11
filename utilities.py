@@ -43,7 +43,7 @@ class DataLoader:
             try:
                 article_data = json.load(open(f"{self.src_data_path}/{file_name}", "r"))
             except:
-                print("corrupt file")
+                # print("corrupt file")
                 os.remove(f"{self.src_data_path}/{file_name}")
                 continue
             yield article_data

@@ -247,7 +247,7 @@ async def main():
     else:
         seen_articles_links = set(utilities.get_existing_links())
 
-    batch_size = 100
+    batch_size = CONFIG["SCRAP_PARAM"]["BATCH_SIZE"]
     print(f"nb of seen articles: {len(seen_articles_links)}")
     while len(all_type_of_links["articles_links"]) > 0:
         # Make sure the batch size is valid

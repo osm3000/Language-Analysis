@@ -7,23 +7,24 @@ from bs4 import BeautifulSoup
 import json
 import asyncio
 import uuid
-import configparser
 from datetime import datetime, timedelta
 import os
 import slack_bot
+import utilities
+import configurations
+import argparse
+import pathlib
 
-config = configparser.ConfigParser()
-config.read("./config/config.ini")
 
+CONFIG = configurations.get_config_file()
 
-SECRETS = configparser.ConfigParser()
-SECRETS.read("./config/auth_lemonde.ini")
+SECRETS = configurations.get_secrets_file()
 
 # FIRST_DATE = datetime(day=19, month=12, year=1944)
-FIRST_DATE = datetime.strptime(config["DATES"]["START"], "%d-%m-%Y")
-END_DATE = datetime.strptime(config["DATES"]["END"], "%d-%m-%Y")
+FIRST_DATE = datetime.strptime(CONFIG["DATES"]["START"], "%d-%m-%Y")
+END_DATE = datetime.strptime(CONFIG["DATES"]["END"], "%d-%m-%Y")
 
-GET_FRESH = True
+GET_FRESH = False
 # GET_FRESH = False
 
 all_type_of_links = {
@@ -59,22 +60,15 @@ def generate_whole_years():
 async def get_article_content(article_url):
     global sess
     # page = requests.get(article_url)
-    print(f"Before the get: {article_url}")
     page = sess.get(article_url)
-    # print(f"After the GET: {article_url}")
     soup = BeautifulSoup(page.content, "html.parser")
-    # soup.str
     img_links = []
     img_captions = []
     all_href = []
     all_href_text = []
-    # print(soup.find_all("figure"))
     for item in soup.find_all("figure"):
-        # print(item)
         link = item.find("img")
         caption = item.find("figcaption")
-
-        # print(caption.text)
 
         try:
             x = link["src"]
@@ -147,7 +141,6 @@ async def get_article_content(article_url):
     related_articles_titles = soup.find_all("span", class_="teaser__title")
 
     for item in related_articles_titles:
-        print(item)
         other_articles_titles.append(item.text)
 
     for item in related_articles_desc:
@@ -178,7 +171,6 @@ def get_number_of_pages(article_url, page):
 
     legal = False
     all_pages = page.find_all("a", class_="river__pagination--page")
-    # print(f"Number of pages here is: {len(all_pages)}")
     if len(all_pages) > 0:
         for page_index, page in enumerate(all_pages):
             if page_index == 0:
@@ -198,7 +190,6 @@ def get_number_of_pages(article_url, page):
 def get_article_links_in_the_page(page):
     all_links = page.find_all("a", class_="teaser__link")
     for link in all_links:
-        # print(link.get("href"))
         all_type_of_links["articles_links"].add(link.get("href"))
 
 
@@ -206,8 +197,8 @@ async def main():
     # Get all possible article pages
     global all_type_of_links
     index = 0
-    generate_whole_years()
     if GET_FRESH:
+        generate_whole_years()
         while len(all_type_of_links["articles_pages"]) > 0:
             await asyncio.gather(
                 *[
@@ -232,7 +223,7 @@ async def main():
                 break
     else:
         with open(
-            f"{config['DIR_PATH']['SRC_DIR']}/all_links_recorded.json", "r"
+            f"{CONFIG['DIR_PATH']['SRC_DIR']}/all_links_recorded.json", "r"
         ) as file_handle:
             all_type_of_links = json.load(file_handle)
 
@@ -241,25 +232,53 @@ async def main():
         my_bot(
             f'Scrapping LeMonde: Current number of articles: {len(all_type_of_links["articles_links"])}'
         )
-    # exit()
+
     all_type_of_links["articles_pages"] = list(all_type_of_links["articles_pages"])
     all_type_of_links["articles_links"] = list(all_type_of_links["articles_links"])
-    # print(f"All collected links: {all_type_of_links['articles_links']}")
 
     with open(
-        f"{config['DIR_PATH']['SRC_DIR']}/all_links_recorded.json", "w"
+        f"{CONFIG['DIR_PATH']['SRC_DIR']}/all_links_recorded.json", "w"
     ) as file_handle:
         json.dump(all_type_of_links, file_handle)
 
-    await asyncio.gather(
-        *[
-            get_contents_of_articles(link_index, link)
-            for link_index, link in enumerate(list(all_type_of_links["articles_links"]))
-        ]
-    )
-    # for link_index, link in enumerate(list(all_type_of_links["articles_links"])):
-    #     await get_contents_of_articles(link_index, link)
-    # get_contents_of_articles()
+    # See if you need to load the list of seen articles:
+    if GET_FRESH:
+        seen_articles_links = set()
+    else:
+        seen_articles_links = set(utilities.get_existing_links())
+
+    batch_size = 100
+    print(f"nb of seen articles: {len(seen_articles_links)}")
+    while len(all_type_of_links["articles_links"]) > 0:
+        # Make sure the batch size is valid
+        if len(all_type_of_links["articles_links"]) < batch_size:
+            batch_size = len(all_type_of_links["articles_links"])
+
+        # Build a batch from clean links
+        links_batch = []
+        for _ in range(batch_size):
+            article_link = all_type_of_links["articles_links"].pop()
+            if article_link not in seen_articles_links:
+                links_batch.append(article_link)
+
+        # Perform the requests on those links
+        await asyncio.gather(
+            *[
+                get_contents_of_articles(link)
+                for link_index, link in enumerate(links_batch)
+            ]
+        )
+
+        # Record those links as 'seen' links
+        for link in links_batch:
+            seen_articles_links.add(link)
+
+        # Store the seen links everywhile
+
+        with slack_bot.BasicBot() as my_bot:
+            my_bot(
+                f"Scrapping LeMonde: {len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} articles are done"
+            )
 
 
 async def get_all_links_in_page(article_page):
@@ -275,29 +294,18 @@ async def get_all_links_in_page(article_page):
         get_number_of_pages(article_page, soup)
 
 
-async def get_contents_of_articles(articles_index, articles_link):
+async def get_contents_of_articles(articles_link):
     # Get all articles content
-    if ((articles_index + 1) % 500) == 0:
-        with slack_bot.BasicBot() as my_bot:
-            my_bot(f"Scrapping LeMonde: {articles_index} articles are done")
-
-    if articles_link not in seen_articles_links:
-        seen_articles_links.add(articles_link)
-
-        # print(articles_link)
-        print(
-            f"Article Index: {articles_index} / {len(all_type_of_links['articles_links'])}"
+    article_content = await get_article_content(articles_link)
+    with open(
+        f"{CONFIG['DIR_PATH']['SRC_DIR']}/{str(uuid.uuid4())}.json", "w"
+    ) as file_handle:
+        json.dump(
+            article_content,
+            file_handle,
         )
-        article_content = await get_article_content(articles_link)
-        with open(
-            f"{config['DIR_PATH']['SRC_DIR']}/{str(uuid.uuid4())}.json", "w"
-        ) as file_handle:
-            json.dump(
-                article_content,
-                file_handle,
-            )
 
-        print("/*" * 50)
+    # print("/*" * 50)
 
 
 if __name__ == "__main__":
@@ -305,9 +313,9 @@ if __name__ == "__main__":
     with slack_bot.BasicBot() as my_bot:
         my_bot("Scrapping LeMonde: Started")
 
-    if not os.path.isdir(config["DIR_PATH"]["SRC_DIR"]):
+    if not os.path.isdir(CONFIG["DIR_PATH"]["SRC_DIR"]):
         print(f"Folder doesn't exit. Create it")
-        os.mkdir(config["DIR_PATH"]["SRC_DIR"])
+        os.mkdir(CONFIG["DIR_PATH"]["SRC_DIR"])
 
     payload = {
         "email": SECRETS["AUTH"]["email"],

@@ -24,8 +24,8 @@ SECRETS = configurations.get_secrets_file()
 FIRST_DATE = datetime.strptime(CONFIG["DATES"]["START"], "%d-%m-%Y")
 END_DATE = datetime.strptime(CONFIG["DATES"]["END"], "%d-%m-%Y")
 
+# GET_FRESH = True
 GET_FRESH = False
-# GET_FRESH = False
 
 all_type_of_links = {
     # "articles_pages": {"https://www.lemonde.fr/archives-du-monde/14-01-2020/"},
@@ -150,6 +150,7 @@ async def get_article_content(article_url):
         other_articles_links.append(item["href"])
 
     package = {
+        "page_status": page.status_code,
         "article_link": article_url,
         "all_href": all_href,
         "all_href_text": all_href_text,
@@ -249,6 +250,8 @@ async def main():
 
     batch_size = int(CONFIG["SCRAP_PARAM"]["BATCH_SIZE"])
     print(f"nb of seen articles: {len(seen_articles_links)}")
+
+    final_success = True
     while len(all_type_of_links["articles_links"]) > 0:
         # Make sure the batch size is valid
         if len(all_type_of_links["articles_links"]) < batch_size:
@@ -260,29 +263,42 @@ async def main():
             article_link = all_type_of_links["articles_links"].pop()
             if article_link not in seen_articles_links:
                 links_batch.append(article_link)
+        # Don't go through the rest of the loop if there are no new link in this batch
+        if len(links_batch) == 0:
+            print("Nothing new in this batch")
+            continue
 
         # Perform the requests on those links
-        await asyncio.gather(
+        success_list = await asyncio.gather(
             *[
                 get_contents_of_articles(link)
                 for link_index, link in enumerate(links_batch)
             ]
         )
+        success_set = set(success_list)
 
-        # Record those links as 'seen' links
-        for link in links_batch:
-            seen_articles_links.add(link)
+        if False not in success_set:
+            # Record those links as 'seen' links
+            for link in links_batch:
+                seen_articles_links.add(link)
 
-        # Store the seen links everywhile
+            # Store the seen links everywhile
 
-        with slack_bot.BasicBot() as my_bot:
-            my_bot(
-                f"Scrapping LeMonde: {len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} articles are done"
+            with slack_bot.BasicBot() as my_bot:
+                my_bot(
+                    f"Scrapping LeMonde: {len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} articles are done"
+                )
+
+            print(
+                f"{len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} are done!"
             )
-
-        print(
-            f"{len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} are done!"
-        )
+        else:
+            with slack_bot.BasicBot() as my_bot:
+                my_bot(f"Scrapping LeMonde: Server is no longer playing...")
+            final_success = False
+            break
+    with slack_bot.BasicBot() as my_bot:
+        my_bot(f"Scrapping LeMonde: The infernal loop is over.....{final_success}")
 
 
 async def get_all_links_in_page(article_page):
@@ -300,16 +316,28 @@ async def get_all_links_in_page(article_page):
 
 async def get_contents_of_articles(articles_link):
     # Get all articles content
-    article_content = await get_article_content(articles_link)
-    with open(
-        f"{CONFIG['DIR_PATH']['SRC_DIR']}/{str(uuid.uuid4())}.json", "w"
-    ) as file_handle:
-        json.dump(
-            article_content,
-            file_handle,
-        )
+    success = True
+    try:
+        article_content = await get_article_content(articles_link)
+        if article_content["page_status"] == 200:
+            with open(
+                f"{CONFIG['DIR_PATH']['SRC_DIR']}/{str(uuid.uuid4())}.json", "w"
+            ) as file_handle:
+                json.dump(
+                    article_content,
+                    file_handle,
+                )
+        elif article_content["page_status"] == 404:
+            print(
+                f'Can\'t find the page: {article_content["page_status"]} -- {articles_link}'
+            )
+        else:
+            print(f'Weird response: {article_content["page_status"]}')
+            success = False
+    except:
+        print(f"Bad link: {articles_link}")
 
-    # print("/*" * 50)
+    return success
 
 
 if __name__ == "__main__":

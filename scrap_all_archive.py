@@ -283,11 +283,13 @@ async def main():
                 seen_articles_links.add(link)
 
             # Store the seen links everywhile
-
-            with slack_bot.BasicBot() as my_bot:
-                my_bot(
-                    f"Scrapping LeMonde: {len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} articles are done"
-                )
+            try:
+                with slack_bot.BasicBot() as my_bot:
+                    my_bot(
+                        f"Scrapping LeMonde: {len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} articles are done"
+                    )
+            except:
+                print("Problem with Slack")
 
             print(
                 f"{len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} are done!"
@@ -327,15 +329,15 @@ async def get_contents_of_articles(articles_link):
                     article_content,
                     file_handle,
                 )
-        elif article_content["page_status"] == 404:
-            print(
-                f'Can\'t find the page: {article_content["page_status"]} -- {articles_link}'
-            )
+        # elif article_content["page_status"] == 404:
+        #     print(
+        #         f'Can\'t find the page: {article_content["page_status"]} -- {articles_link}'
+        #     )
         else:
             print(
                 f'Weird response: {article_content["page_status"]} -- {articles_link}'
             )
-            success = False
+        #     success = False
     except:
         print(f"Bad link: {articles_link}")
 

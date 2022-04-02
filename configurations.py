@@ -12,6 +12,8 @@ def get_config_file():
         config.read("./config/config_local.ini")
     elif config_machines["MACHINES"][HOSTNAME] == "remote":
         config.read("./config/config_remote.ini")
+    elif config_machines["MACHINES"][HOSTNAME] == "pi":
+        config.read("./config/config_pi.ini")
     else:
         config.read("./config/config_local.ini")
 

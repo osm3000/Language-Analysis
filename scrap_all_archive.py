@@ -332,7 +332,9 @@ async def get_contents_of_articles(articles_link):
                 f'Can\'t find the page: {article_content["page_status"]} -- {articles_link}'
             )
         else:
-            print(f'Weird response: {article_content["page_status"]}')
+            print(
+                f'Weird response: {article_content["page_status"]} -- {articles_link}'
+            )
             success = False
     except:
         print(f"Bad link: {articles_link}")

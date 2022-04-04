@@ -259,7 +259,7 @@ async def main():
 
         # Build a batch from clean links
         links_batch = []
-        for _ in range(batch_size):
+        while len(links_batch) < range(batch_size):
             article_link = all_type_of_links["articles_links"].pop()
             if article_link not in seen_articles_links:
                 links_batch.append(article_link)

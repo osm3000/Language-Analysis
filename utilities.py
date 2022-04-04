@@ -124,3 +124,14 @@ def get_existing_links():
             list_of_links.append(article_data["article_link"])
 
     return list_of_links
+
+
+def check_file_for_content(file_contents: dict):
+    """
+    Check if the file has proper contents. A damage/corruption can happen due to server problems, connection problems, interruption in the scrapping process, ....etc.
+    STATUS: NOT-TESTED
+    """
+    if len(file_contents["article_content"]["content"]) == 0:  # Corrupted content
+        return False
+    else:  # Good content
+        return True

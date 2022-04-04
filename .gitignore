@@ -2,3 +2,9 @@ config/auth_lemonde.ini
 __pycache__/
 data_*/
 docs/
+logs/
+gcp_scripts/
+archive.zip
+.vscode
+results/
+tokenized_data/

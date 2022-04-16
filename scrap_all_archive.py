@@ -24,8 +24,8 @@ SECRETS = configurations.get_secrets_file()
 FIRST_DATE = datetime.strptime(CONFIG["DATES"]["START"], "%d-%m-%Y")
 END_DATE = datetime.strptime(CONFIG["DATES"]["END"], "%d-%m-%Y")
 
-# GET_FRESH = True
-GET_FRESH = False
+GET_FRESH = True
+# GET_FRESH = False
 
 all_type_of_links = {
     # "articles_pages": {"https://www.lemonde.fr/archives-du-monde/14-01-2020/"},
@@ -252,14 +252,17 @@ async def main():
     print(f"nb of seen articles: {len(seen_articles_links)}")
 
     final_success = True
-    while len(all_type_of_links["articles_links"]) > 0:
+    nb_of_articles_left = len(all_type_of_links["articles_links"]) - len(
+        seen_articles_links
+    )
+    while nb_of_articles_left > 0:
         # Make sure the batch size is valid
-        if len(all_type_of_links["articles_links"]) < batch_size:
-            batch_size = len(all_type_of_links["articles_links"])
+        if nb_of_articles_left < batch_size:
+            batch_size = nb_of_articles_left
 
         # Build a batch from clean links
         links_batch = []
-        while len(links_batch) < range(batch_size):
+        while len(links_batch) < batch_size:
             article_link = all_type_of_links["articles_links"].pop()
             if article_link not in seen_articles_links:
                 links_batch.append(article_link)
@@ -277,28 +280,24 @@ async def main():
         )
         success_set = set(success_list)
 
-        if False not in success_set:
-            # Record those links as 'seen' links
-            for link in links_batch:
-                seen_articles_links.add(link)
+        # Record those links as 'seen' links
+        for link in links_batch:
+            seen_articles_links.add(link)
 
-            # Store the seen links everywhile
-            try:
-                with slack_bot.BasicBot() as my_bot:
-                    my_bot(
-                        f"Scrapping LeMonde: {len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} articles are done"
-                    )
-            except:
-                print("Problem with Slack")
+        nb_of_articles_left -= len(links_batch)
 
-            print(
-                f"{len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} are done!"
-            )
-        else:
+        # Store the seen links everywhile
+        try:
             with slack_bot.BasicBot() as my_bot:
-                my_bot(f"Scrapping LeMonde: Server is no longer playing...")
-            final_success = False
-            break
+                my_bot(
+                    f"Scrapping LeMonde: {len(seen_articles_links)}/{nb_of_articles_left} articles are done"
+                )
+        except:
+            print("Problem with Slack")
+
+        print(
+            f"{len(seen_articles_links)}/{len(all_type_of_links['articles_links'])} are done!"
+        )
     with slack_bot.BasicBot() as my_bot:
         my_bot(f"Scrapping LeMonde: The infernal loop is over.....{final_success}")
 

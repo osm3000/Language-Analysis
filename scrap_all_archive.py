@@ -14,11 +14,11 @@ import utilities
 import configurations
 import argparse
 import pathlib
-
+import hashlib
 
 CONFIG = configurations.get_config_file()
 
-SECRETS = configurations.get_secrets_file()
+SECRETS = configurations.get_lemonde_auth()
 
 # FIRST_DATE = datetime(day=19, month=12, year=1944)
 FIRST_DATE = datetime.strptime(CONFIG["DATES"]["START"], "%d-%m-%Y")
@@ -321,8 +321,12 @@ async def get_contents_of_articles(articles_link):
     try:
         article_content = await get_article_content(articles_link)
         if article_content["page_status"] == 200:
+            article_file_name = article_content["article_link"]
+            hashed_article_file_name = hashlib.md5(
+                article_file_name.encode()
+            ).hexdigest()
             with open(
-                f"{CONFIG['DIR_PATH']['SRC_DIR']}/{str(uuid.uuid4())}.json", "w"
+                f"{CONFIG['DIR_PATH']['SRC_DIR']}/{hashed_article_file_name}.json", "w"
             ) as file_handle:
                 json.dump(
                     article_content,

@@ -20,11 +20,21 @@ def get_config_file():
     return config
 
 
-def get_secrets_file():
+def get_lemonde_auth():
     config = configparser.ConfigParser()
     try:
         config.read("./config/auth_lemonde.ini")
     except:
         config = {"auth": {"username": "", "password": ""}}
+        print("Valid authentication file not found")
+    return config
+
+
+def get_db_auth():
+    config = configparser.ConfigParser()
+    try:
+        config.read("./config/auth_db.ini")
+    except:
+        config = {"auth": {"username": "", "password": "", "url": ""}}
         print("Valid authentication file not found")
     return config

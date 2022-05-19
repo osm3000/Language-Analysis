@@ -1,20 +1,16 @@
-from html import entities
-from pydoc_data.topics import topics
-from turtle import color
-import spacy
-from spacy.lang.fr.examples import sentences
-import json
+"""
+Perform some basic analysis over the articles
+"""
+import logging
+import configparser
 import os
+import json
 import numpy as np
 import pandas as pd
-from os import path
-from PIL import Image
 import matplotlib.pyplot as plt
-from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
-import configparser
-import tqdm
-import logging
+from wordcloud import WordCloud
 import utilities
+import tokenizer
 
 config = configparser.ConfigParser()
 config.read("./config/config.ini")
@@ -30,110 +26,28 @@ FILTERS = dict(config["FILTERS"])
 
 SRC_DIR = config["DIR_PATH"]["SRC_DIR"]
 TGT_DIR = config["DIR_PATH"]["TGT_DIR"]
-nlp = None
+FILTER_DIR = ""
 
 
 def prepare_words_to_store(unique_words: dict) -> pd.DataFrame:
     """
     Perform some organization for the list of words, since this is a final product in itself.
     """
-    df = pd.DataFrame()
-    df["words"] = [word for word in unique_words]
-    df["occurrences"] = [unique_words[word] for word in unique_words]
-    df["frequency"] = df["occurrences"] * 100 / df["occurrences"].sum()
-    df.sort_values(by="occurrences", ascending=False, inplace=True)
-
-    return df
-
-
-def clean_word(word: str) -> str:
-    """
-    This part is based on visual investigation of the output words.
-    """
-    if word in ["-", "’", "–", "−"]:
-        return ""
-
-    word = word.lower()
-    word = word.replace("-", "").replace("–", "").replace("”", "")
-
-    if len(word) > 0:
-        if (word[-1] == "’") or (word[-1] == "'"):
-            word = word.replace("’", "e")
-            word = word.replace("'", "e")
-    return word
-
-
-def get_words_from_article(article_text):
-    doc = nlp(article_text)
-
-    words = {}
-    verbs = {}
-    nouns = {}
-    adverbs = {}
-    entities = {}
-
-    for entity in doc.ents:
-        try:
-            entities[entity.label_][entity.text.lower()] += 1
-        except:
-            try:
-                entities[entity.label_][entity.text.lower()] = 1
-            except:
-                entities[entity.label_] = {entity.text.lower(): 1}
-
-    for token in doc:
-        if token.pos_ in ["SPACE", "PUNCT", "NUM", "SYM", "ADP", "DET"]:
-            continue
-
-        # Perform extract cleaning on the word
-        final_token = clean_word(token.lemma_)
-        if len(final_token) == 0:
-            continue
-
-        if token.pos_ in ["VERB"]:
-            try:
-                verbs[final_token] += 1
-            except:
-                verbs[final_token] = 1
-
-        if token.pos_ in ["NOUN"]:
-            try:
-                nouns[final_token] += 1
-            except:
-                nouns[final_token] = 1
-
-        if token.pos_ in ["ADV"]:
-            try:
-                adverbs[final_token] += 1
-            except:
-                adverbs[final_token] = 1
-
-        try:
-            words[final_token] += 1
-        except:
-            words[final_token] = 1
-        # all_words.append(final_token)
-    # return words, " ".join(all_words)
-    return words, verbs, nouns, adverbs, entities
-
-
-def load_one_article(article_data):
-    article_main_text = (
-        article_data["article_content"]["title"]
-        + " "
-        + article_data["article_content"]["description"]
-        + " "
-        + article_data["article_content"]["content"]
+    data_frame = pd.DataFrame()
+    data_frame["words"] = list(unique_words)
+    data_frame["occurrences"] = [unique_words[word] for word in unique_words]
+    data_frame["frequency"] = (
+        data_frame["occurrences"] * 100 / data_frame["occurrences"].sum()
     )
+    data_frame.sort_values(by="occurrences", ascending=False, inplace=True)
 
-    all_words, verbs, nouns, adverbs, entities = get_words_from_article(
-        article_main_text
-    )
-    return all_words, verbs, nouns, adverbs, entities
+    return data_frame
 
 
-def get_articles(directory):
-    file_names = os.listdir(directory)
+def get_articles():
+    """
+    The main loop over each article, to filter it and tokenize the words.
+    """
     all_new_words = {}
 
     all_verbs = {}
@@ -151,6 +65,8 @@ def get_articles(directory):
 
     total_number_of_words = 0
 
+    word_tokenizer = tokenizer.Spacy_Tokenizer()
+
     with utilities.DataLoader(limit=-1) as data_handler:
         for file_index, article_data in enumerate(data_handler):
             article_insertion_speed = 0
@@ -159,9 +75,13 @@ def get_articles(directory):
                     logging.info("%s files are done", file_index)
                 # logging.info("Processing file: %s, %s", file_index, file_name)
                 nb_of_articles += 1
-                all_words, verbs, nouns, adverbs, entities = load_one_article(
-                    article_data
-                )
+                (
+                    all_words,
+                    verbs,
+                    nouns,
+                    adverbs,
+                    entities,
+                ) = word_tokenizer(article_data)
 
                 for new_entity_label in entities:
                     if new_entity_label not in all_entities:
@@ -172,7 +92,7 @@ def get_articles(directory):
                             all_entities[new_entity_label][new_entity_txt] += entities[
                                 new_entity_label
                             ][new_entity_txt]
-                        except:
+                        except KeyError:
                             all_entities[new_entity_label][new_entity_txt] = entities[
                                 new_entity_label
                             ][new_entity_txt]
@@ -180,7 +100,7 @@ def get_articles(directory):
                 for new_word in all_words:
                     try:
                         all_new_words[new_word] += all_words[new_word]
-                    except:
+                    except KeyError:
                         all_new_words[new_word] = all_words[new_word]
                         article_insertion_speed += 1
                     total_number_of_words += all_words[new_word]
@@ -188,19 +108,19 @@ def get_articles(directory):
                 for new_word in verbs:
                     try:
                         all_verbs[new_word] += verbs[new_word]
-                    except:
+                    except KeyError:
                         all_verbs[new_word] = verbs[new_word]
 
                 for new_word in nouns:
                     try:
                         all_nouns[new_word] += nouns[new_word]
-                    except:
+                    except KeyError:
                         all_nouns[new_word] = nouns[new_word]
 
                 for new_word in adverbs:
                     try:
                         all_adverbs[new_word] += adverbs[new_word]
-                    except:
+                    except KeyError:
                         all_adverbs[new_word] = adverbs[new_word]
 
                 all_years.append(article_data["publication_date"]["year"])
@@ -209,16 +129,14 @@ def get_articles(directory):
 
                 total_insertion_speed.append(article_insertion_speed)
 
-        # return all_words
-
     # print(f"Insertion speeds: {total_insertion_speed}")
     logging.info("Nb of total words seen so far: %s", total_number_of_words)
-    logging.info("Nb of unique words seen so far: %s", len(all_new_words.keys()))
-    logging.info("Nb of unique verbs seen so far: %s", len(all_verbs.keys()))
-    logging.info("Nb of unique nouns seen so far: %s", len(all_nouns.keys()))
-    logging.info("Nb of unique adverbs seen so far: %s", len(all_adverbs.keys()))
-    # print(f"Nb of unique entities seen so far: {len(all_entities.keys())}")
-
+    logging.info("Nb of unique words seen so far: %s", len(all_new_words))
+    logging.info("Nb of unique verbs seen so far: %s", len(all_verbs))
+    logging.info("Nb of unique nouns seen so far: %s", len(all_nouns))
+    logging.info("Nb of unique adverbs seen so far: %s", len(all_adverbs))
+    # print(f"Nb of unique entities seen so far: {len(all_entities)}")
+    # exit()
     log_file = {
         "total_insertion_speed": total_insertion_speed,
         "total_number_of_words": total_number_of_words,
@@ -228,7 +146,8 @@ def get_articles(directory):
         "entities": all_entities,
     }
 
-    json.dump(log_file, open(f"{TGT_DIR}/{FILTER_DIR}/logs.json", "w"))
+    with open(f"{TGT_DIR}/{FILTER_DIR}/logs.json", "w") as file_handle:
+        json.dump(log_file, file_handle)
 
     clean_all_new_words_df = prepare_words_to_store(all_new_words)
     clean_all_new_words_df.to_csv(
@@ -249,6 +168,9 @@ def get_articles(directory):
 
 
 def clean_and_store_word_dictionaries(words_dict: dict, file_name: str) -> None:
+    """
+    Remove
+    """
     prepare_words_to_store(words_dict).to_csv(
         f"{TGT_DIR}/{FILTER_DIR}/{file_name}.csv", index=False
     )
@@ -256,6 +178,10 @@ def clean_and_store_word_dictionaries(words_dict: dict, file_name: str) -> None:
 
 
 def draw_insertion_speed(insertion_speeds_list: list):
+    """
+    A function to draw the insertion speed -> how each article contribute
+    to the knowledge of new words.
+    """
     # insertion_speeds_np = np.sort(np.array(insertion_speeds_list))[::-1]
     insertion_speeds_np = np.array(insertion_speeds_list)
     # plt.figure()
@@ -282,6 +208,9 @@ def draw_insertion_speed(insertion_speeds_list: list):
 
 
 def draw_word_cloud(words_frequencies: dict, name: str):
+    """
+    A function to draw Word Clouds
+    """
     wordcloud = WordCloud(
         max_words=1000, background_color="white", width=1000, height=1000
     )
@@ -309,11 +238,11 @@ def form_results_folder_name(filters: dict):
         FILTER_DIR += "-".join(utilities.parse_single_filter_list(filters[item])) + "_"
     FILTER_DIR = FILTER_DIR[:-1]  # to remove the last '-' from the code
     if FILTER_DIR == "":
-        FILTER_DIR = "noFilter"
+        FILTER_DIR = "no_filter"
     try:
         os.mkdir(f"{TGT_DIR}/{FILTER_DIR}")
-    except Exception as e:
-        logging.warning("COULDN'T MAKE DIRECTORY --- %s", e)
+    except OSError as exc:
+        logging.warning("COULDN'T MAKE DIRECTORY --- %s", exc)
 
     logging.info("Filter configuration: %s", FILTER_DIR)
 
@@ -325,9 +254,8 @@ def main():
     logging.info("/*" * 20)
     logging.info("Fresh new run")
     form_results_folder_name(filters=FILTERS)
-    get_articles(SRC_DIR)
+    get_articles()
 
 
 if __name__ == "__main__":
-    nlp = spacy.load(config["SPACY_PARAM"]["LANG_MODEL"])
     main()

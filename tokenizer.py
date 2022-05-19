@@ -1,8 +1,6 @@
 import spacy
 import configparser
-
-config = configparser.ConfigParser()
-config.read("./config/config.ini")
+import configurations
 
 
 class Spacy_Tokenizer:
@@ -11,7 +9,7 @@ class Spacy_Tokenizer:
     """
 
     def __init__(self) -> None:
-        self.nlp_lang_model = spacy.load(config["SPACY_PARAM"]["LANG_MODEL"])
+        self.nlp_lang_model = spacy.load(configurations.get_config_file()["SPACY_PARAM"]["LANG_MODEL"])
 
     @staticmethod
     def clean_word(word: str) -> str:

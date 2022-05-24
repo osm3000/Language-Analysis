@@ -1,5 +1,6 @@
 # French-Analysis
 This is a simple analysis for the articles provided from LeMonde.
+Okay, this is becoming more deeper analysis :)
 
 ## Technincal Todo
 [ ] Easy filtering for the articles

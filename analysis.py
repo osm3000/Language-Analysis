@@ -9,14 +9,14 @@ import pandas as pd
 from collections.abc import Sequence
 import logging
 import configparser
-import tokenization
+import tokenization_depreciated
 import utilities
 
 config = configparser.ConfigParser()
 config.read("./config/config.ini")
 
 FILTERS = dict(config["FILTERS"])
-RESULTS_DIR = tokenization.form_results_folder_name(FILTERS)
+RESULTS_DIR = tokenization_depreciated.form_results_folder_name(FILTERS)
 TGT_DIR = config["DIR_PATH"]["TGT_DIR"]
 TOKENIZED_DIR = config["DIR_PATH"]["TOKENIZED_DIR"]
 

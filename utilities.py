@@ -1,12 +1,14 @@
 """
 Facilities required for a better re-factorization of the code
 """
+from scipy import rand
 import configurations
 import logging
 import os
 import tqdm
 import json
 import asyncio
+import random
 
 CONFIG = configurations.get_config_file()
 
@@ -153,7 +155,7 @@ class AsyncDataQueries:
 
 
 class DataLoader:
-    def __init__(self, limit: int = -1, use_tokenized=False, data_path="") -> None:
+    def __init__(self, limit: int = -1, use_tokenized=False, data_path="", rnd_seed=None) -> None:
         self.use_tokenized = use_tokenized
         if data_path == "":
             if use_tokenized:
@@ -164,6 +166,10 @@ class DataLoader:
             self.src_data_path = data_path
 
         self.all_file_names = os.listdir(self.src_data_path)
+        if rnd_seed is not None:
+            random.seed(int(rnd_seed))
+        random.shuffle(self.all_file_names) # This process is inplace!
+
         self.limit = limit
         self._get_clean_file_names()
 

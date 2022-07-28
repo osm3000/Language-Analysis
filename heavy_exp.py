@@ -15,7 +15,7 @@ import string
 
 tokenizer_object = tokenizer.Spacy_Tokenizer()
 DATA_PATH = './ALL_DATA_2/'
-FRESH_EXP = False
+EXP_ID = 0 # 0 for the optimized search, 1 for the random one
 all_data_file_names = os.listdir(DATA_PATH)
 
 
@@ -178,18 +178,96 @@ def select_optimal_article_one_simulation(trial_index:int):
         
     return record_numbers, meta_data
 
+
+def select_random_article_one_simulation(trial_index: int = 0):
+    print(f'Trial {trial_index} just started')
+
+    important_words_80_freq, recently_visited_word_80_freq = init_freq_dict()
+
+    max_of_epochcs = 50
+    objective_reached = False
+#     record_numbers = {"nb of articles": [], "objective": []}
+    record_numbers = {}
+    nb_of_repetition_to_success = 10
+    nb_of_articles_per_epoch = 100
+
+    article_cnt = 1
+
+    while (max_of_epochcs > 0) and (objective_reached == False):
+        sample_article_filenames = random.choices(
+            all_data_file_names, k=nb_of_articles_per_epoch)
+        for single_article_filename in sample_article_filenames:
+            with open(DATA_PATH + single_article_filename, 'r') as file_handle:
+                article_content = json.load(file_handle)
+                all_words, verbs, nouns, adverbs, entities = tokenizer_object(
+                    article_content)
+    #             print(all_words)
+
+                # Add to the observations
+                for word in all_words:
+                    try:
+                        important_words_80_freq[word] += all_words[word]
+                        recently_visited_word_80_freq[word] = True
+                    except:
+                        continue
+        # Account for forgetting - each non-visited word will get a -1
+        for word in recently_visited_word_80_freq:
+            # Apply the memory forgetting
+            if recently_visited_word_80_freq[word] == False:
+                important_words_80_freq[word] -= 1
+                if important_words_80_freq[word] < 0:
+                    important_words_80_freq[word] = 0
+
+            elif recently_visited_word_80_freq[word] == True:  # Toggle it
+                recently_visited_word_80_freq[word] = False
+
+        # Calculate the current rewards - cap each word at at
+        observed_words = 0
+        for word in important_words_80_freq:
+            if important_words_80_freq[word] > nb_of_repetition_to_success:
+                observed_words += nb_of_repetition_to_success
+            else:
+                observed_words += important_words_80_freq[word]
+
+        # Observed numbers so far
+#         observed_words = np.sum(list(important_words_80_freq.values()))
+        success_criteria = observed_words / \
+            (len(important_words_80_freq.keys()) * nb_of_repetition_to_success)
+        if success_criteria >= 1:
+            objective_reached = True
+            print("Mission Accomplished!")
+
+        max_of_epochcs -= 1
+#         print(f'Epoch # : {max_of_epochcs} - Objective Tracking: {observed_words} - Progress Bar: {success_criteria}')
+
+        # Record Progress for later
+#         record_numbers['nb of articles'].append([article_cnt * nb_of_articles_per_epoch])
+#         record_numbers['objective'].append(success_criteria)
+        record_numbers[article_cnt] = success_criteria
+
+        article_cnt += 1
+
+    print(f'Trial {trial_index} ENDED -------------')
+
+    return record_numbers
+
 # select_optimal_article_one_simulation(trial_index=0)
 if __name__ == "__main__":
     results = None
     time_0 = time.time()
-    # trial_indices = list(range(10))
-    trial_indices = list(range(30, 40))
-    with Pool(multiprocessing.cpu_count()) as p:
-        results = p.map(select_optimal_article_one_simulation, trial_indices)
+    if EXP_ID == 0:
+        print(f'EXP {EXP_ID} - Simulating optimized article selection')
+        trial_indices = list(range(40, 50))
+        with Pool(multiprocessing.cpu_count()) as p:
+            results = p.map(select_optimal_article_one_simulation, trial_indices)
+    elif EXP_ID == 1: 
+        print(f'EXP {EXP_ID} - Simulating random article selection')
+        trial_indices = list(range(20))
+        with Pool(multiprocessing.cpu_count()) as p:
+            record_numbers = p.map(select_random_article_one_simulation, trial_indices)
+            record_numbers_df = pd.DataFrame.from_records(record_numbers)
+            record_numbers_df.to_json("simulation_results.json")
 
     time_1 = time.time()
 
     print(f'Total time = {time_1 - time_0}')
-
-    # with open('heavy_exp_results.json', 'w') as file_handle:
-    #     json.dump(results, file_handle)

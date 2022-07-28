@@ -5,7 +5,7 @@ Using different word vectorization technicques, what can tell about our document
 """
 import configparser
 from sklearn.feature_extraction.text import TfidfVectorizer
-from tokenization import apply_filter_value
+from tokenization_depreciated import apply_filter_value
 import numpy as np
 from collections.abc import Mapping, Sequence
 import os
